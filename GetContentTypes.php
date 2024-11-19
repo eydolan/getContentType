@@ -4,6 +4,8 @@
  * A snippet that returns all MODX content types
  * 
  * PARAMETERS:
+ *  &id - Specific content type ID to return [optional] 
+
  * &format - Output format (array|json) [default=array]
  * &tpl - Name of chunk for individual content type template [optional]
  * &wrapperTpl - Name of chunk for wrapping all results [optional]
@@ -38,9 +40,17 @@
 $format = $modx->getOption('format', $scriptProperties, 'array');
 $tpl = $modx->getOption('tpl', $scriptProperties, '');
 $wrapperTpl = $modx->getOption('wrapperTpl', $scriptProperties, '');
+$contentTypeId = $modx->getOption('id', $scriptProperties, 0); // Add this line
+
+
 
 // Get all content types
-$contentTypes = $modx->getCollection('modContentType');
+if ($contentTypeId > 0) {
+	$contentTypes = $modx->getObject('modContentType', $contentTypeId);
+	$contentTypes = $contentTypes ? array($contentTypes) : array();
+} else {
+	$contentTypes = $modx->getCollection('modContentType');
+}
 
 // Prepare the output array
 $output = array();
@@ -58,13 +68,38 @@ foreach ($contentTypes as $contentType) {
 // If a template chunk is specified, process each item through it
 if (!empty($tpl)) {
 	$processedOutput = '';
+
+	// Handle both regular chunks and @INLINE chunks
+	$isInline = strpos($tpl, '@INLINE') === 0;
+	$chunkName = $isInline ? substr($tpl, 8) : $tpl;
+
+	// Only check for chunk existence if it's not an @INLINE chunk
+	if (!$isInline && !$modx->getObject('modChunk', array('name' => $tpl))) {
+		return 'Error: Chunk "' . $tpl . '" not found';
+	}
+	// Debug: Check if output array has items
+	if (empty($output)) {
+		return 'Error: No content types found';
+	}
 	foreach ($output as $item) {
-		$processedOutput .= $modx->getChunk($tpl, $item);
+		$chunk = $isInline
+			? $modx->parseChunk('@INLINE ' . $chunkName, $item)
+			: $modx->getChunk($tpl, $item);
+		$processedOutput .= $chunk;
 	}
 
-	// If wrapper template is specified, wrap the output
 	if (!empty($wrapperTpl)) {
-		$processedOutput = $modx->getChunk($wrapperTpl, array('output' => $processedOutput));
+		$isInlineWrapper = strpos($wrapperTpl, '@INLINE') === 0;
+		$wrapperChunkName = $isInlineWrapper ? substr($wrapperTpl, 8) : $wrapperTpl;
+
+		// Only check for chunk existence if it's not an @INLINE chunk
+		if (!$isInlineWrapper && !$modx->getObject('modChunk', array('name' => $wrapperTpl))) {
+			return 'Error: Wrapper chunk "' . $wrapperTpl . '" not found';
+		}
+
+		$processedOutput = $isInlineWrapper
+			? $modx->parseChunk('@INLINE ' . $wrapperChunkName, array('output' => $processedOutput))
+			: $modx->getChunk($wrapperTpl, array('output' => $processedOutput));
 	}
 
 	return $processedOutput;
@@ -73,9 +108,7 @@ if (!empty($tpl)) {
 // If no template, return based on format
 switch ($format) {
 	case 'json':
-		return json_encode($output, JSON_PRETTY_PRINT);
-
-	case 'array':
+		return $modx->toJSON($output);
 	default:
-		return print_r($output, true);
+		return var_export($output, true);
 }
