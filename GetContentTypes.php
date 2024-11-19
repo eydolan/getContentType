@@ -61,7 +61,8 @@ foreach ($contentTypes as $contentType) {
 		'description' => $contentType->get('description'),
 		'mime_type' => $contentType->get('mime_type'),
 		'file_extensions' => $contentType->get('file_extensions'),
-		'binary' => $contentType->get('binary')
+		'binary' => $contentType->get('binary'),
+		'icon' => $contentType->get('icon')
 	);
 }
 
